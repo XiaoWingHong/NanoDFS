@@ -41,18 +41,53 @@ function ensureClientRole(metadata: MetadataStore) {
   };
 }
 
+function normalizeDataNodeHost(host: string): string {
+  return host.trim().replace(/^https?:\/\//i, "").replace(/\/+$/g, "");
+}
+
+function dataNodeAddress(node: DataNodeEndpoint): string {
+  const normalizedHost = normalizeDataNodeHost(node.host);
+  return `${normalizedHost || node.host.trim()}:${node.port}`;
+}
+
+function dataNodeBlockUrl(node: DataNodeEndpoint, blockId: string): string {
+  const normalizedHost = normalizeDataNodeHost(node.host);
+  if (!normalizedHost) {
+    throw new Error(
+      `Invalid data node host for ${dataNodeAddress(node)}. Check client data node host configuration.`
+    );
+  }
+  return `http://${normalizedHost}:${node.port}/api/data/blocks/${encodeURIComponent(blockId)}`;
+}
+
+async function fetchDataNode(
+  node: DataNodeEndpoint,
+  url: string,
+  init: RequestInit,
+  operation: string
+): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to contact data node ${dataNodeAddress(node)} during ${operation}. Check host/port in client config and ensure the data node is reachable and running. (${reason})`
+    );
+  }
+}
+
 async function putBlock(node: DataNodeEndpoint, blockId: string, payload: Buffer): Promise<Response> {
-  const url = `http://${node.host}:${node.port}/api/data/blocks/${encodeURIComponent(blockId)}`;
-  return fetch(url, {
+  const url = dataNodeBlockUrl(node, blockId);
+  return fetchDataNode(node, url, {
     method: "PUT",
     headers: { "content-type": "application/octet-stream" },
     body: new Uint8Array(payload)
-  });
+  }, `block upload (${blockId})`);
 }
 
 async function deleteBlock(node: DataNodeEndpoint, blockId: string): Promise<void> {
-  const url = `http://${node.host}:${node.port}/api/data/blocks/${encodeURIComponent(blockId)}`;
-  await fetch(url, { method: "DELETE" });
+  const url = dataNodeBlockUrl(node, blockId);
+  await fetchDataNode(node, url, { method: "DELETE" }, `block delete (${blockId})`);
 }
 
 function resolveDataNodeForBlock(
@@ -72,8 +107,8 @@ function resolveDataNodeForBlock(
 }
 
 async function fetchBlockBuffer(node: DataNodeEndpoint, blockId: string): Promise<Buffer> {
-  const url = `http://${node.host}:${node.port}/api/data/blocks/${encodeURIComponent(blockId)}`;
-  const response = await fetch(url);
+  const url = dataNodeBlockUrl(node, blockId);
+  const response = await fetchDataNode(node, url, {}, `block download (${blockId})`);
   if (!response.ok) {
     throw new Error(`Failed to download block ${blockId} from ${node.host}:${node.port}`);
   }

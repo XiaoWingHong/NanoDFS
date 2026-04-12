@@ -7,8 +7,25 @@ export function isValidDataNodePort(port: number): boolean {
   return Number.isInteger(port) && port >= 1 && port <= 65535;
 }
 
+function dataNodeHostValidationError(host: string): string | null {
+  if (typeof host !== "string" || host.trim().length === 0) {
+    return "Each data node must have a non-empty host";
+  }
+  const normalized = host.trim();
+  if (/^https?:\/\//i.test(normalized)) {
+    return "Each data node host must be a plain host/IP without http:// or https://";
+  }
+  if (/[/?#]/.test(normalized)) {
+    return "Each data node host must not include path, query, or hash components";
+  }
+  if (/\s/.test(normalized)) {
+    return "Each data node host must not contain whitespace";
+  }
+  return null;
+}
+
 export function isValidDataNodeHost(host: string): boolean {
-  return typeof host === "string" && host.trim().length > 0;
+  return dataNodeHostValidationError(host) === null;
 }
 
 export interface RawDataNodeInput {
@@ -43,8 +60,9 @@ export function validateDataNodesInput(
     const raw = n as RawDataNodeInput;
     const host = String(raw.host ?? "").trim();
     const port = Number(raw.port);
-    if (!isValidDataNodeHost(host)) {
-      return { ok: false, error: "Each data node must have a non-empty host" };
+    const hostError = dataNodeHostValidationError(host);
+    if (hostError) {
+      return { ok: false, error: hostError };
     }
     if (!Number.isInteger(port) || !isValidDataNodePort(port)) {
       return { ok: false, error: "Each data node port must be an integer from 1 to 65535" };
