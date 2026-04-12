@@ -1,6 +1,6 @@
-# NanoDFS MVP
+# NanoDFS
 
-NanoDFS is a compact HDFS-inspired distributed file system with two runtime roles in one Docker image:
+NanoDFS is a HDFS-inspired distributed file system:
 
 - **Client node**: file manager, upload/download/delete, node config, reporting + CSV export.
 - **Data node**: block storage server with local disk usage display and configurable upload/download rate limits.
@@ -9,16 +9,12 @@ NanoDFS is a compact HDFS-inspired distributed file system with two runtime role
 
 ### 1. Get the repository
 
-When this project is published on GitHub, replace the URL below with your repository archive link. The placeholder shows the intended pattern.
+Clone:
 
 ```bash
-# Example: download and extract the default branch as a tarball (adjust URL after publish)
-curl -L -o nanodfs.tar.gz https://github.com/OWNER/REPO/archive/refs/heads/main.tar.gz
-tar xzf nanodfs.tar.gz
-cd REPO-main
+git clone https://github.com/XiaoWingHong/NanoDFS.git
+cd NanoDFS
 ```
-
-Until the repo URL is final, clone or copy the project into a local directory and `cd` into it before the next steps.
 
 ### 2. Build the Docker image
 
@@ -59,7 +55,7 @@ Start it:
 docker compose -f docker-compose.yml up -d
 ```
 
-Open **http://localhost:3000**, choose **Client node**, then configure data nodes using the **host IP and mapped host ports** of your data containers (e.g. `host.docker.internal` or the host LAN IP, not `127.0.0.1` from inside another container, unless you use host networking).
+Open **[http://localhost:3000](http://localhost:3000)**, choose **Client node**, then configure data nodes using the **host IP and mapped host ports** of your data containers (e.g. `host.docker.internal` or the host LAN IP, not `127.0.0.1` from inside another container, unless you use host networking).
 
 #### `docker-compose.yml` (data nodes)
 
@@ -104,7 +100,7 @@ Start it:
 docker compose -f docker-compose.yml up -d
 ```
 
-On each data container, open the mapped URL (e.g. **http://localhost:4001** and **http://localhost:4002**), choose **Data node**, and set rate limits as needed.
+On each data container, open the mapped URL (e.g. **[http://localhost:4001](http://localhost:4001)** and **[http://localhost:4002](http://localhost:4002)**), choose **Data node**, and set rate limits as needed.
 
 ---
 
@@ -133,3 +129,4 @@ On each data container, open the mapped URL (e.g. **http://localhost:4001** and 
         ├── components/        # e.g. report panel
         └── styles/
 ```
+
