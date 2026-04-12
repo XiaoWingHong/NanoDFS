@@ -186,7 +186,7 @@ export default function ClientPage() {
             <input
               type="number"
               min={1024 / BYTES_PER_MB}
-              step={0.001}
+              step="any"
               value={Number(blockSizeBytesToMb(config.blockSizeBytes).toFixed(6))}
               onChange={(e) =>
                 setConfig((prev) => ({
