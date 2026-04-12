@@ -12,6 +12,14 @@ import { roundRobinAssignments, runWithConcurrency } from "../services/scheduler
 import { validateDataNodesInput } from "../services/validation.js";
 import { escapeCsvRow } from "../services/csv.js";
 
+const PROCESSING_START_HEADER = "x-processing-start-ms";
+const PROCESSING_END_HEADER = "x-processing-end-ms";
+
+interface BlockTimingRange {
+  startMs: number;
+  endMs: number;
+}
+
 export interface ClientRouterOptions {
   /** Temp directory for disk-backed multipart uploads */
   uploadDir: string;
@@ -85,6 +93,15 @@ async function putBlock(node: DataNodeEndpoint, blockId: string, payload: Buffer
   }, `block upload (${blockId})`);
 }
 
+function parseTimingFromHeaders(response: Response, fallback: BlockTimingRange): BlockTimingRange {
+  const rawStart = Number(response.headers.get(PROCESSING_START_HEADER));
+  const rawEnd = Number(response.headers.get(PROCESSING_END_HEADER));
+  if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd) || rawEnd < rawStart) {
+    return fallback;
+  }
+  return { startMs: rawStart, endMs: rawEnd };
+}
+
 async function deleteBlock(node: DataNodeEndpoint, blockId: string): Promise<void> {
   const url = dataNodeBlockUrl(node, blockId);
   await fetchDataNode(node, url, { method: "DELETE" }, `block delete (${blockId})`);
@@ -106,14 +123,22 @@ function resolveDataNodeForBlock(
   return null;
 }
 
-async function fetchBlockBuffer(node: DataNodeEndpoint, blockId: string): Promise<Buffer> {
+async function fetchBlockBuffer(
+  node: DataNodeEndpoint,
+  blockId: string,
+  localStartMs: number
+): Promise<{ buffer: Buffer; timing: BlockTimingRange }> {
   const url = dataNodeBlockUrl(node, blockId);
   const response = await fetchDataNode(node, url, {}, `block download (${blockId})`);
   if (!response.ok) {
     throw new Error(`Failed to download block ${blockId} from ${node.host}:${node.port}`);
   }
   const ab = await response.arrayBuffer();
-  return Buffer.from(ab);
+  const localEndMs = Date.now();
+  return {
+    buffer: Buffer.from(ab),
+    timing: parseTimingFromHeaders(response, { startMs: localStartMs, endMs: localEndMs })
+  };
 }
 
 async function cleanupUploadedBlocks(
@@ -262,23 +287,24 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
 
         let blockMetrics: BlockMetric[] = [];
         let transferStartMs: number | null = null;
+        let transferEndMs: number | null = null;
         const handle = await fsPromises.open(file.path, "r");
         try {
           blockMetrics = await runWithConcurrency(assignments, config.maxConcurrentTasks, async (assignment) => {
             const payload = await readFileBlock(handle, assignment.index, blockSizeBytes, fileSize);
             const blockId = `${fileId}-${assignment.index}-${randomUUID().slice(0, 8)}`;
-            const blockStartMs = Date.now();
-            if (transferStartMs === null) {
-              transferStartMs = blockStartMs;
-            }
+            const localStartMs = Date.now();
             const response = await putBlock(assignment.node, blockId, payload);
             if (!response.ok) {
               throw new Error(
                 `Block upload failed for ${blockId} to ${assignment.node.host}:${assignment.node.port}`
               );
             }
-            const blockEndMs = Date.now();
-            const elapsed = elapsedSeconds(blockStartMs, blockEndMs);
+            const localEndMs = Date.now();
+            const timing = parseTimingFromHeaders(response, { startMs: localStartMs, endMs: localEndMs });
+            transferStartMs = transferStartMs === null ? timing.startMs : Math.min(transferStartMs, timing.startMs);
+            transferEndMs = transferEndMs === null ? timing.endMs : Math.max(transferEndMs, timing.endMs);
+            const elapsed = elapsedSeconds(timing.startMs, timing.endMs);
             blockRecords.push({
               blockId,
               index: assignment.index,
@@ -305,11 +331,12 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
         }
 
         blockRecords.sort((a, b) => a.index - b.index);
-        const endMs = Date.now();
-        const effectiveStartMs = transferStartMs ?? endMs;
+        const fallbackNow = Date.now();
+        const effectiveStartMs = transferStartMs ?? fallbackNow;
+        const effectiveEndMs = transferEndMs ?? fallbackNow;
         const startedAt = new Date(effectiveStartMs).toISOString();
-        const finishedAt = new Date().toISOString();
-        const totalElapsed = elapsedSeconds(effectiveStartMs, endMs);
+        const finishedAt = new Date(effectiveEndMs).toISOString();
+        const totalElapsed = elapsedSeconds(effectiveStartMs, effectiveEndMs);
         await metadata.upsertFile({
           fileId,
           name: file.originalname,
@@ -352,6 +379,7 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
     const cfg = await metadata.getClientConfig();
     const nodeById = new Map(cfg.dataNodes.map((node) => [node.id, node]));
     let transferStartMs: number | null = null;
+    let transferEndMs: number | null = null;
     const reportId = randomUUID();
 
     const sorted = [...file.blocks].sort((a, b) => a.index - b.index);
@@ -361,13 +389,11 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
         if (!node) {
           throw new Error(`Missing data node configuration for block ${block.blockId}`);
         }
-        const blockStartMs = Date.now();
-        if (transferStartMs === null) {
-          transferStartMs = blockStartMs;
-        }
-        const buffer = await fetchBlockBuffer(node, block.blockId);
-        const blockEndMs = Date.now();
-        const elapsed = elapsedSeconds(blockStartMs, blockEndMs);
+        const localStartMs = Date.now();
+        const { buffer, timing } = await fetchBlockBuffer(node, block.blockId, localStartMs);
+        transferStartMs = transferStartMs === null ? timing.startMs : Math.min(transferStartMs, timing.startMs);
+        transferEndMs = transferEndMs === null ? timing.endMs : Math.max(transferEndMs, timing.endMs);
+        const elapsed = elapsedSeconds(timing.startMs, timing.endMs);
         const metric: BlockMetric = {
           blockId: block.blockId,
           index: block.index,
@@ -389,11 +415,12 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
 
       const blockMetrics = blockResults.map((r) => r.metric);
       const body = Buffer.concat(blockResults.map((r) => r.buffer));
-      const endMs = Date.now();
-      const effectiveStartMs = transferStartMs ?? endMs;
+      const fallbackNow = Date.now();
+      const effectiveStartMs = transferStartMs ?? fallbackNow;
+      const effectiveEndMs = transferEndMs ?? fallbackNow;
       const startedAt = new Date(effectiveStartMs).toISOString();
-      const finishedAt = new Date().toISOString();
-      const totalElapsed = elapsedSeconds(effectiveStartMs, endMs);
+      const finishedAt = new Date(effectiveEndMs).toISOString();
+      const totalElapsed = elapsedSeconds(effectiveStartMs, effectiveEndMs);
       await metadata.saveReport(
         {
           operation: "download",

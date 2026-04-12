@@ -6,6 +6,8 @@ import { isValidRateLimit } from "../services/validation.js";
 
 const PUBLIC_IP_CACHE_TTL_MS = 60_000;
 const PUBLIC_IP_LOOKUP_TIMEOUT_MS = 3_000;
+const PROCESSING_START_HEADER = "X-Processing-Start-Ms";
+const PROCESSING_END_HEADER = "X-Processing-End-Ms";
 const PUBLIC_IP_SERVICES = [
   "https://api.ipify.org?format=json",
   "https://ifconfig.me/ip"
@@ -110,6 +112,9 @@ export function dataRouter(metadata: MetadataStore, storage: DataStorage) {
       const { maxUploadMbps } = await metadata.getDataConfig();
       await throttleByMbps(payload.length, maxUploadMbps, startedAtMs);
       storage.writeBlock(blockId, payload);
+      const finishedAtMs = Date.now();
+      res.setHeader(PROCESSING_START_HEADER, String(startedAtMs));
+      res.setHeader(PROCESSING_END_HEADER, String(finishedAtMs));
       return res.json({ blockId, sizeBytes: payload.length });
     });
   });
@@ -127,6 +132,9 @@ export function dataRouter(metadata: MetadataStore, storage: DataStorage) {
       const startedAtMs = Date.now();
       const { maxDownloadMbps } = await metadata.getDataConfig();
       await throttleByMbps(block.length, maxDownloadMbps, startedAtMs);
+      const finishedAtMs = Date.now();
+      res.setHeader(PROCESSING_START_HEADER, String(startedAtMs));
+      res.setHeader(PROCESSING_END_HEADER, String(finishedAtMs));
       res.setHeader("Content-Type", "application/octet-stream");
       res.setHeader("Content-Length", String(block.length));
       return res.send(block);
