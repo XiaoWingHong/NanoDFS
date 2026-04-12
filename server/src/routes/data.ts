@@ -88,18 +88,30 @@ export function dataRouter(metadata: MetadataStore, storage: DataStorage) {
   const router = Router();
   router.use(ensureDataRole(metadata));
   router.use("/blocks", express.raw({ type: "application/octet-stream", limit: "1gb" }));
+  let blockOperationQueue = Promise.resolve();
+
+  function serializeBlockOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const nextOperation = blockOperationQueue.then(operation, operation);
+    blockOperationQueue = nextOperation.then(
+      () => undefined,
+      () => undefined
+    );
+    return nextOperation;
+  }
 
   router.put("/blocks/:blockId", async (req, res) => {
     const blockId = req.params.blockId;
     if (!isValidBlockId(blockId)) {
       return res.status(400).json({ error: "Invalid block id" });
     }
-    const payload = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body ?? "");
-    const startedAtMs = Date.now();
-    const { maxUploadMbps } = await metadata.getDataConfig();
-    await throttleByMbps(payload.length, maxUploadMbps, startedAtMs);
-    storage.writeBlock(blockId, payload);
-    return res.json({ blockId, sizeBytes: payload.length });
+    return serializeBlockOperation(async () => {
+      const payload = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body ?? "");
+      const startedAtMs = Date.now();
+      const { maxUploadMbps } = await metadata.getDataConfig();
+      await throttleByMbps(payload.length, maxUploadMbps, startedAtMs);
+      storage.writeBlock(blockId, payload);
+      return res.json({ blockId, sizeBytes: payload.length });
+    });
   });
 
   router.get("/blocks/:blockId", async (req, res) => {
@@ -107,16 +119,18 @@ export function dataRouter(metadata: MetadataStore, storage: DataStorage) {
     if (!isValidBlockId(blockId)) {
       return res.status(400).json({ error: "Invalid block id" });
     }
-    if (!storage.exists(blockId)) {
-      return res.status(404).json({ error: "Block not found" });
-    }
-    const block = storage.readBlock(blockId);
-    const startedAtMs = Date.now();
-    const { maxDownloadMbps } = await metadata.getDataConfig();
-    await throttleByMbps(block.length, maxDownloadMbps, startedAtMs);
-    res.setHeader("Content-Type", "application/octet-stream");
-    res.setHeader("Content-Length", String(block.length));
-    return res.send(block);
+    return serializeBlockOperation(async () => {
+      if (!storage.exists(blockId)) {
+        return res.status(404).json({ error: "Block not found" });
+      }
+      const block = storage.readBlock(blockId);
+      const startedAtMs = Date.now();
+      const { maxDownloadMbps } = await metadata.getDataConfig();
+      await throttleByMbps(block.length, maxDownloadMbps, startedAtMs);
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Length", String(block.length));
+      return res.send(block);
+    });
   });
 
   router.delete("/blocks/:blockId", (req, res) => {

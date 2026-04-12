@@ -253,8 +253,6 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
     try {
       for (const file of files) {
         const fileId = randomUUID();
-        const startedAt = new Date().toISOString();
-        const startMs = Date.now();
         const blockSizeBytes = config.blockSizeBytes;
         const stat = await fsPromises.stat(file.path);
         const fileSize = stat.size;
@@ -263,12 +261,16 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
         const blockRecords: FileBlockRecord[] = [];
 
         let blockMetrics: BlockMetric[] = [];
+        let transferStartMs: number | null = null;
         const handle = await fsPromises.open(file.path, "r");
         try {
           blockMetrics = await runWithConcurrency(assignments, config.maxConcurrentTasks, async (assignment) => {
             const payload = await readFileBlock(handle, assignment.index, blockSizeBytes, fileSize);
             const blockId = `${fileId}-${assignment.index}-${randomUUID().slice(0, 8)}`;
             const blockStartMs = Date.now();
+            if (transferStartMs === null) {
+              transferStartMs = blockStartMs;
+            }
             const response = await putBlock(assignment.node, blockId, payload);
             if (!response.ok) {
               throw new Error(
@@ -304,8 +306,10 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
 
         blockRecords.sort((a, b) => a.index - b.index);
         const endMs = Date.now();
+        const effectiveStartMs = transferStartMs ?? endMs;
+        const startedAt = new Date(effectiveStartMs).toISOString();
         const finishedAt = new Date().toISOString();
-        const totalElapsed = elapsedSeconds(startMs, endMs);
+        const totalElapsed = elapsedSeconds(effectiveStartMs, endMs);
         await metadata.upsertFile({
           fileId,
           name: file.originalname,
@@ -347,8 +351,7 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
     }
     const cfg = await metadata.getClientConfig();
     const nodeById = new Map(cfg.dataNodes.map((node) => [node.id, node]));
-    const startedAt = new Date().toISOString();
-    const startMs = Date.now();
+    let transferStartMs: number | null = null;
     const reportId = randomUUID();
 
     const sorted = [...file.blocks].sort((a, b) => a.index - b.index);
@@ -359,6 +362,9 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
           throw new Error(`Missing data node configuration for block ${block.blockId}`);
         }
         const blockStartMs = Date.now();
+        if (transferStartMs === null) {
+          transferStartMs = blockStartMs;
+        }
         const buffer = await fetchBlockBuffer(node, block.blockId);
         const blockEndMs = Date.now();
         const elapsed = elapsedSeconds(blockStartMs, blockEndMs);
@@ -384,8 +390,10 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
       const blockMetrics = blockResults.map((r) => r.metric);
       const body = Buffer.concat(blockResults.map((r) => r.buffer));
       const endMs = Date.now();
+      const effectiveStartMs = transferStartMs ?? endMs;
+      const startedAt = new Date(effectiveStartMs).toISOString();
       const finishedAt = new Date().toISOString();
-      const totalElapsed = elapsedSeconds(startMs, endMs);
+      const totalElapsed = elapsedSeconds(effectiveStartMs, endMs);
       await metadata.saveReport(
         {
           operation: "download",

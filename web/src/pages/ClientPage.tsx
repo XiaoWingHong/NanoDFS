@@ -7,7 +7,7 @@ import {
   getReport,
   listFiles,
   saveClientConfig,
-  uploadFilesWithProgress
+  uploadFiles
 } from "../api";
 import type { ClientConfig, FileRecord, TransferReport } from "../types";
 
@@ -15,12 +15,6 @@ const BYTES_PER_MB = 1024 * 1024;
 const CLIENT_HASH_PREFIX = "#/client/";
 
 type ClientView = "configuration" | "transfers" | "reports";
-
-interface TransferProgressState {
-  label: string;
-  loaded: number;
-  total: number | null;
-}
 
 function blockSizeBytesToMb(bytes: number): number {
   return bytes / BYTES_PER_MB;
@@ -57,35 +51,6 @@ function asMb(value: number): string {
   return `${(value / BYTES_PER_MB).toFixed(3)} MB`;
 }
 
-function progressPercent(progress: TransferProgressState | null): number | null {
-  if (!progress || !progress.total || progress.total <= 0) {
-    return null;
-  }
-  return Math.max(0, Math.min(100, (progress.loaded / progress.total) * 100));
-}
-
-function ProgressCard({ title, progress }: { title: string; progress: TransferProgressState | null }) {
-  if (!progress) {
-    return null;
-  }
-  const percent = progressPercent(progress);
-  return (
-    <div className="stack progress-group">
-      <strong>{title}</strong>
-      <p className="tiny">{progress.label}</p>
-      {percent === null ? (
-        <progress className="progress" />
-      ) : (
-        <progress className="progress" max={100} value={percent} />
-      )}
-      <p className="tiny">
-        {asMb(progress.loaded)}
-        {progress.total ? ` / ${asMb(progress.total)}` : ""} {percent === null ? "" : `(${percent.toFixed(1)}%)`}
-      </p>
-    </div>
-  );
-}
-
 export default function ClientPage() {
   const [config, setConfig] = useState<ClientConfig>(DEFAULT_CONFIG);
   const [files, setFiles] = useState<FileRecord[]>([]);
@@ -96,9 +61,8 @@ export default function ClientPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [view, setView] = useState<ClientView>(() => parseViewFromHash(window.location.hash));
-  const [uploadProgress, setUploadProgress] = useState<TransferProgressState | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<TransferProgressState | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   async function refreshAll() {
@@ -173,17 +137,11 @@ export default function ClientPage() {
       return;
     }
     setBusy(true);
+    setIsUploading(true);
     setMessage("");
     setError("");
-    setUploadProgress({ label: "Uploading files", loaded: 0, total: null });
     try {
-      const response = await uploadFilesWithProgress(uploadQueue, (progress) => {
-        setUploadProgress({
-          label: "Uploading files",
-          loaded: progress.loaded,
-          total: progress.total
-        });
-      });
+      const response = await uploadFiles(uploadQueue);
       const incoming = response.results.map((r) => r.report);
       setReports((prev) => mergeReports(prev, incoming));
       setSelectedReportId(incoming[0]?.reportId ?? null);
@@ -196,7 +154,7 @@ export default function ClientPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
-      setUploadProgress(null);
+      setIsUploading(false);
       setBusy(false);
     }
   }
@@ -229,19 +187,11 @@ export default function ClientPage() {
     setBusy(true);
     setError("");
     setMessage("");
-    setDownloadProgress({ label: "Preparing downloads", loaded: 0, total: null });
     try {
       const incoming: TransferReport[] = [];
       for (let index = 0; index < selectedFiles.length; index += 1) {
         const file = selectedFiles[index];
-        const label = `Downloading ${file.name} (${index + 1}/${selectedFiles.length})`;
-        const { blob, reportId } = await downloadFileWithProgress(file.fileId, (progress) => {
-          setDownloadProgress({
-            label,
-            loaded: progress.loaded,
-            total: progress.total ?? file.sizeBytes ?? null
-          });
-        });
+        const { blob, reportId } = await downloadFileWithProgress(file.fileId);
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
@@ -260,7 +210,6 @@ export default function ClientPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Download failed");
     } finally {
-      setDownloadProgress(null);
       setBusy(false);
     }
   }
@@ -362,7 +311,7 @@ export default function ClientPage() {
                 Upload selected files
               </button>
             </form>
-            <ProgressCard title="Upload Progress" progress={uploadProgress} />
+            {isUploading && <p className="tiny">Uploading ...</p>}
           </section>
 
           <section className="card">
@@ -377,7 +326,6 @@ export default function ClientPage() {
                 </button>
               </div>
             </div>
-            <ProgressCard title="Download Progress" progress={downloadProgress} />
             <table className="table">
               <thead>
                 <tr>
@@ -398,7 +346,7 @@ export default function ClientPage() {
                       />
                     </td>
                     <td>{file.name}</td>
-                    <td>{file.sizeBytes} B</td>
+                    <td>{asMb(file.sizeBytes)}</td>
                     <td>{new Date(file.uploadedAt).toLocaleString()}</td>
                   </tr>
                 ))}
