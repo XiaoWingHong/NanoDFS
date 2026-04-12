@@ -55,7 +55,7 @@ Start it:
 docker compose -f docker-compose.yml up -d
 ```
 
-Open **[http://localhost:3000](http://localhost:3000)**, choose **Client node**, then configure data nodes using the **host IP and mapped host ports** of your data containers (e.g. `host.docker.internal` or the host LAN IP, not `127.0.0.1` from inside another container, unless you use host networking).
+Open **http://HOST_IP:3000**, choose **Client node**, then configure data nodes using the **host IP and mapped host ports** of your data nodes containers.
 
 #### `docker-compose.yml` (data nodes)
 
@@ -100,7 +100,7 @@ Start it:
 docker compose -f docker-compose.yml up -d
 ```
 
-On each data container, open the mapped URL (e.g. **[http://localhost:4001](http://localhost:4001)** and **[http://localhost:4002](http://localhost:4002)**), choose **Data node**, and set rate limits as needed.
+On each data container, open the mapped URL (e.g. **http://HOST_IP:4001** and **http://HOST_IP:4002**), choose **Data node**, and set rate limits as needed.
 
 ---
 
