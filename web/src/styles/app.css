@@ -1,0 +1,120 @@
+:root {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: #111;
+  background: #fff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #fff;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 16px;
+  background: #fff;
+}
+
+.center {
+  text-align: center;
+}
+
+.stack {
+  display: grid;
+  gap: 10px;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row-space {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.button {
+  display: inline-block;
+  border: 1px solid #222;
+  background: #222;
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button.secondary {
+  background: #fff;
+  color: #222;
+}
+
+.button.danger {
+  background: #9b1c1c;
+  border-color: #9b1c1c;
+}
+
+input {
+  width: 100%;
+  border: 1px solid #c7c7c7;
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+}
+
+label {
+  display: grid;
+  gap: 4px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border: 1px solid #e5e5e5;
+  text-align: left;
+  padding: 8px;
+}
+
+.node-row {
+  display: grid;
+  grid-template-columns: 1.6fr 0.8fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.tiny {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.ok {
+  color: #0e7a0d;
+}
+
+.error {
+  color: #c61d1d;
+}

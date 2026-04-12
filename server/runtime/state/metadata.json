@@ -1,0 +1,27 @@
+{
+  "role": "client",
+  "clientConfig": {
+    "blockSizeBytes": 1048576,
+    "maxConcurrentTasks": 4,
+    "dataNodes": [
+      {
+        "id": "f7d4f86e-d598-413f-abf0-8059d8ddaba9",
+        "host": "127.0.0.1",
+        "port": 4301,
+        "enabled": true
+      },
+      {
+        "id": "ea6cca27-aa6f-4b5a-9c40-5d103b55f64f",
+        "host": "127.0.0.1",
+        "port": 4302,
+        "enabled": true
+      }
+    ]
+  },
+  "dataConfig": {
+    "maxUploadMbps": 200,
+    "maxDownloadMbps": 200
+  },
+  "files": [],
+  "reports": []
+}

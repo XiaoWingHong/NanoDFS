@@ -1,0 +1,49 @@
+# agents
+.agents
+.cursor
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and debug
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Vite (when cacheDir is not under node_modules)
+**/.vite/
+
+# Vitest
+.vitest/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor (optional local overrides — remove if you commit shared settings)
+*.swp
+*.swo
+*~
+
+# other
+requirements.md
