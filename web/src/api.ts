@@ -1,5 +1,12 @@
 import type { ClientConfig, FileRecord, NodeRole, TransferReport } from "./types";
 
+export interface TransferProgress {
+  loaded: number;
+  total: number | null;
+}
+
+const UPLOAD_TIMEOUT_MS = 300_000;
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
@@ -44,16 +51,54 @@ export async function listFiles() {
 }
 
 export async function uploadFiles(files: File[]) {
+  return uploadFilesWithProgress(files);
+}
+
+export async function uploadFilesWithProgress(
+  files: File[],
+  onProgress?: (progress: TransferProgress) => void
+) {
   const form = new FormData();
   for (const file of files) {
     form.append("files", file);
   }
-  const response = await fetch("/api/client/upload", { method: "POST", body: form });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Upload failed" }));
-    throw new Error(error.error || "Upload failed");
-  }
-  return (await response.json()) as { results: Array<{ fileId: string; report: TransferReport }> };
+
+  const responseText = await new Promise<string>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/client/upload");
+    xhr.timeout = UPLOAD_TIMEOUT_MS;
+
+    xhr.upload.onprogress = (event) => {
+      if (onProgress) {
+        onProgress({
+          loaded: event.loaded,
+          total: event.lengthComputable ? event.total : null
+        });
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.responseText);
+        return;
+      }
+      let error = "Upload failed";
+      try {
+        const parsed = JSON.parse(xhr.responseText) as { error?: string };
+        error = parsed.error || error;
+      } catch {
+        // keep fallback message
+      }
+      reject(new Error(error));
+    };
+
+    xhr.onerror = () => reject(new Error("Upload failed"));
+    xhr.ontimeout = () => reject(new Error("Upload timed out"));
+    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.send(form);
+  });
+
+  return JSON.parse(responseText) as { results: Array<{ fileId: string; report: TransferReport }> };
 }
 
 export async function deleteFiles(fileIds: string[]) {
@@ -66,6 +111,50 @@ export async function deleteFiles(fileIds: string[]) {
 
 export async function getReport(reportId: string) {
   return request<TransferReport>(`/api/client/reports/${encodeURIComponent(reportId)}`);
+}
+
+export async function downloadFileWithProgress(
+  fileId: string,
+  onProgress?: (progress: TransferProgress) => void
+) {
+  const response = await fetch(`/api/client/files/${encodeURIComponent(fileId)}/download`);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Download failed" }));
+    throw new Error(error.error || "Download failed");
+  }
+
+  const reportId = response.headers.get("X-Report-Id");
+  const contentLengthHeader = response.headers.get("Content-Length");
+  const parsedLength = contentLengthHeader ? Number(contentLengthHeader) : NaN;
+  const total = Number.isFinite(parsedLength) && parsedLength > 0 ? parsedLength : null;
+  const body = response.body;
+
+  if (!body) {
+    const blob = await response.blob();
+    onProgress?.({ loaded: blob.size, total: blob.size || total });
+    return { blob, reportId };
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (value) {
+      const chunkCopy = Uint8Array.from(value);
+      chunks.push(chunkCopy);
+      loaded += chunkCopy.length;
+      onProgress?.({ loaded, total });
+    }
+  }
+
+  const blob = new Blob(chunks as unknown as BlobPart[]);
+  onProgress?.({ loaded, total: total ?? loaded });
+  return { blob, reportId };
 }
 
 export async function getDataStatus() {

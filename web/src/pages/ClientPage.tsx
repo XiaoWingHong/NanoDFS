@@ -1,9 +1,26 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReportPanel from "../components/ReportPanel";
-import { deleteFiles, getClientConfig, listFiles, saveClientConfig, uploadFiles } from "../api";
+import {
+  deleteFiles,
+  downloadFileWithProgress,
+  getClientConfig,
+  getReport,
+  listFiles,
+  saveClientConfig,
+  uploadFilesWithProgress
+} from "../api";
 import type { ClientConfig, FileRecord, TransferReport } from "../types";
 
 const BYTES_PER_MB = 1024 * 1024;
+const CLIENT_HASH_PREFIX = "#/client/";
+
+type ClientView = "configuration" | "transfers" | "reports";
+
+interface TransferProgressState {
+  label: string;
+  loaded: number;
+  total: number | null;
+}
 
 function blockSizeBytesToMb(bytes: number): number {
   return bytes / BYTES_PER_MB;
@@ -28,6 +45,47 @@ function mergeReports(prev: TransferReport[], incoming: TransferReport[]): Trans
   return [...incoming, ...prev.filter((r) => !seen.has(r.reportId))];
 }
 
+function parseViewFromHash(hash: string): ClientView {
+  const value = hash.startsWith(CLIENT_HASH_PREFIX) ? hash.slice(CLIENT_HASH_PREFIX.length) : "";
+  if (value === "transfers" || value === "reports") {
+    return value;
+  }
+  return "configuration";
+}
+
+function asMb(value: number): string {
+  return `${(value / BYTES_PER_MB).toFixed(3)} MB`;
+}
+
+function progressPercent(progress: TransferProgressState | null): number | null {
+  if (!progress || !progress.total || progress.total <= 0) {
+    return null;
+  }
+  return Math.max(0, Math.min(100, (progress.loaded / progress.total) * 100));
+}
+
+function ProgressCard({ title, progress }: { title: string; progress: TransferProgressState | null }) {
+  if (!progress) {
+    return null;
+  }
+  const percent = progressPercent(progress);
+  return (
+    <div className="stack progress-group">
+      <strong>{title}</strong>
+      <p className="tiny">{progress.label}</p>
+      {percent === null ? (
+        <progress className="progress" />
+      ) : (
+        <progress className="progress" max={100} value={percent} />
+      )}
+      <p className="tiny">
+        {asMb(progress.loaded)}
+        {progress.total ? ` / ${asMb(progress.total)}` : ""} {percent === null ? "" : `(${percent.toFixed(1)}%)`}
+      </p>
+    </div>
+  );
+}
+
 export default function ClientPage() {
   const [config, setConfig] = useState<ClientConfig>(DEFAULT_CONFIG);
   const [files, setFiles] = useState<FileRecord[]>([]);
@@ -38,6 +96,10 @@ export default function ClientPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<ClientView>(() => parseViewFromHash(window.location.hash));
+  const [uploadProgress, setUploadProgress] = useState<TransferProgressState | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<TransferProgressState | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   async function refreshAll() {
     const [cfg, rows] = await Promise.all([getClientConfig(), listFiles()]);
@@ -49,7 +111,22 @@ export default function ClientPage() {
     refreshAll().catch((err) => setError(err instanceof Error ? err.message : "Failed to load client data"));
   }, []);
 
+  useEffect(() => {
+    const onHashChange = () => {
+      setView(parseViewFromHash(window.location.hash));
+    };
+    window.addEventListener("hashchange", onHashChange);
+    if (!window.location.hash.startsWith(CLIENT_HASH_PREFIX)) {
+      window.location.hash = `${CLIENT_HASH_PREFIX}configuration`;
+    }
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   const selectedFiles = useMemo(() => files.filter((f) => selectedIds.includes(f.fileId)), [files, selectedIds]);
+
+  function navigate(nextView: ClientView) {
+    window.location.hash = `${CLIENT_HASH_PREFIX}${nextView}`;
+  }
 
   function toggleSelection(fileId: string) {
     setSelectedIds((prev) => (prev.includes(fileId) ? prev.filter((it) => it !== fileId) : [...prev, fileId]));
@@ -98,17 +175,28 @@ export default function ClientPage() {
     setBusy(true);
     setMessage("");
     setError("");
+    setUploadProgress({ label: "Uploading files", loaded: 0, total: null });
     try {
-      const response = await uploadFiles(uploadQueue);
+      const response = await uploadFilesWithProgress(uploadQueue, (progress) => {
+        setUploadProgress({
+          label: "Uploading files",
+          loaded: progress.loaded,
+          total: progress.total
+        });
+      });
       const incoming = response.results.map((r) => r.report);
       setReports((prev) => mergeReports(prev, incoming));
       setSelectedReportId(incoming[0]?.reportId ?? null);
       setMessage(`Uploaded ${response.results.length} file(s).`);
       setUploadQueue([]);
+      if (uploadInputRef.current) {
+        uploadInputRef.current.value = "";
+      }
       await refreshAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
+      setUploadProgress(null);
       setBusy(false);
     }
   }
@@ -141,15 +229,19 @@ export default function ClientPage() {
     setBusy(true);
     setError("");
     setMessage("");
+    setDownloadProgress({ label: "Preparing downloads", loaded: 0, total: null });
     try {
       const incoming: TransferReport[] = [];
-      for (const file of selectedFiles) {
-        const response = await fetch(`/api/client/files/${file.fileId}/download`);
-        if (!response.ok) {
-          throw new Error(`Failed to download ${file.name}`);
-        }
-        const reportId = response.headers.get("X-Report-Id");
-        const blob = await response.blob();
+      for (let index = 0; index < selectedFiles.length; index += 1) {
+        const file = selectedFiles[index];
+        const label = `Downloading ${file.name} (${index + 1}/${selectedFiles.length})`;
+        const { blob, reportId } = await downloadFileWithProgress(file.fileId, (progress) => {
+          setDownloadProgress({
+            label,
+            loaded: progress.loaded,
+            total: progress.total ?? file.sizeBytes ?? null
+          });
+        });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
@@ -157,10 +249,7 @@ export default function ClientPage() {
         anchor.click();
         URL.revokeObjectURL(url);
         if (reportId) {
-          const reportResponse = await fetch(`/api/client/reports/${reportId}`);
-          if (reportResponse.ok) {
-            incoming.push((await reportResponse.json()) as TransferReport);
-          }
+          incoming.push(await getReport(reportId));
         }
       }
       if (incoming.length) {
@@ -171,6 +260,7 @@ export default function ClientPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Download failed");
     } finally {
+      setDownloadProgress(null);
       setBusy(false);
     }
   }
@@ -179,128 +269,157 @@ export default function ClientPage() {
     <main className="page">
       <section className="card">
         <h1>Client Node - NanoDFS</h1>
-        <form className="stack" onSubmit={onSaveConfig}>
-          <h2>Configuration</h2>
-          <label>
-            Block size (MB)
-            <input
-              type="number"
-              min={1024 / BYTES_PER_MB}
-              step="any"
-              value={Number(blockSizeBytesToMb(config.blockSizeBytes).toFixed(6))}
-              onChange={(e) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  blockSizeBytes: mbToBlockSizeBytes(Number(e.target.value))
-                }))
-              }
-            />
-          </label>
-          <label>
-            Max concurrent tasks
-            <input
-              type="number"
-              min={1}
-              max={64}
-              value={config.maxConcurrentTasks}
-              onChange={(e) => setConfig((prev) => ({ ...prev, maxConcurrentTasks: Number(e.target.value) }))}
-            />
-          </label>
-          <div className="row-space">
-            <h3>Data nodes (IP + port)</h3>
-            <button className="button secondary" type="button" onClick={addNode}>
-              Add node
-            </button>
-          </div>
-          <div className="stack">
-            {config.dataNodes.map((node, index) => (
-              <div className="node-row" key={node.id}>
-                <input value={node.host} onChange={(e) => updateNode(index, "host", e.target.value)} />
-                <input
-                  type="number"
-                  value={node.port}
-                  onChange={(e) => updateNode(index, "port", Number(e.target.value))}
-                />
-                <label className="tiny">
+        <div className="button-row">
+          <button className={`button ${view === "configuration" ? "" : "secondary"}`} onClick={() => navigate("configuration")}>
+            Configuration
+          </button>
+          <button className={`button ${view === "transfers" ? "" : "secondary"}`} onClick={() => navigate("transfers")}>
+            Transfers
+          </button>
+          <button className={`button ${view === "reports" ? "" : "secondary"}`} onClick={() => navigate("reports")}>
+            Reports
+          </button>
+        </div>
+      </section>
+
+      {view === "configuration" && (
+        <section className="card">
+          <form className="stack" onSubmit={onSaveConfig}>
+            <h2>Configuration</h2>
+            <label>
+              Block size (MB)
+              <input
+                type="number"
+                min={1024 / BYTES_PER_MB}
+                step="any"
+                value={Number(blockSizeBytesToMb(config.blockSizeBytes).toFixed(6))}
+                onChange={(e) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    blockSizeBytes: mbToBlockSizeBytes(Number(e.target.value))
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Max concurrent tasks
+              <input
+                type="number"
+                min={1}
+                max={64}
+                value={config.maxConcurrentTasks}
+                onChange={(e) => setConfig((prev) => ({ ...prev, maxConcurrentTasks: Number(e.target.value) }))}
+              />
+            </label>
+            <div className="row-space">
+              <h3>Data nodes (IP + port)</h3>
+              <button className="button secondary" type="button" onClick={addNode}>
+                Add node
+              </button>
+            </div>
+            <div className="stack">
+              {config.dataNodes.map((node, index) => (
+                <div className="node-row" key={node.id}>
+                  <input value={node.host} onChange={(e) => updateNode(index, "host", e.target.value)} />
                   <input
-                    type="checkbox"
-                    checked={node.enabled}
-                    onChange={(e) => updateNode(index, "enabled", e.target.checked)}
+                    type="number"
+                    value={node.port}
+                    onChange={(e) => updateNode(index, "port", Number(e.target.value))}
                   />
-                  enabled
-                </label>
-                <button className="button danger" type="button" onClick={() => removeNode(index)}>
-                  Remove
+                  <label className="tiny">
+                    <input
+                      type="checkbox"
+                      checked={node.enabled}
+                      onChange={(e) => updateNode(index, "enabled", e.target.checked)}
+                    />
+                    enabled
+                  </label>
+                  <button className="button danger" type="button" onClick={() => removeNode(index)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button className="button" type="submit">
+              Save Configuration
+            </button>
+          </form>
+        </section>
+      )}
+
+      {view === "transfers" && (
+        <>
+          <section className="card">
+            <h2>Upload</h2>
+            <form className="stack" onSubmit={onUpload}>
+              <input
+                ref={uploadInputRef}
+                multiple
+                type="file"
+                onChange={(e) => setUploadQueue(Array.from(e.target.files ?? []))}
+              />
+              <button className="button" disabled={busy} type="submit">
+                Upload selected files
+              </button>
+            </form>
+            <ProgressCard title="Upload Progress" progress={uploadProgress} />
+          </section>
+
+          <section className="card">
+            <div className="row-space">
+              <h2>File Manager</h2>
+              <div className="button-row">
+                <button className="button secondary" disabled={busy} onClick={onDownloadSelected}>
+                  Download selected
+                </button>
+                <button className="button danger" disabled={busy} onClick={onDeleteSelected}>
+                  Delete selected
                 </button>
               </div>
-            ))}
-          </div>
-          <button className="button" type="submit">
-            Save Configuration
-          </button>
-        </form>
-      </section>
+            </div>
+            <ProgressCard title="Download Progress" progress={downloadProgress} />
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Select</th>
+                  <th>Name</th>
+                  <th>Size</th>
+                  <th>Uploaded</th>
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((file) => (
+                  <tr key={file.fileId}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(file.fileId)}
+                        onChange={() => toggleSelection(file.fileId)}
+                      />
+                    </td>
+                    <td>{file.name}</td>
+                    <td>{file.sizeBytes} B</td>
+                    <td>{new Date(file.uploadedAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {!files.length && (
+                  <tr>
+                    <td colSpan={4}>No files uploaded yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </section>
+        </>
+      )}
 
-      <section className="card">
-        <h2>Upload</h2>
-        <form className="stack" onSubmit={onUpload}>
-          <input multiple type="file" onChange={(e) => setUploadQueue(Array.from(e.target.files ?? []))} />
-          <button className="button" disabled={busy} type="submit">
-            Upload selected files
-          </button>
-        </form>
-      </section>
-
-      <section className="card">
-        <div className="row-space">
-          <h2>File Manager</h2>
-          <div className="button-row">
-            <button className="button secondary" disabled={busy} onClick={onDownloadSelected}>
-              Download selected
-            </button>
-            <button className="button danger" disabled={busy} onClick={onDeleteSelected}>
-              Delete selected
-            </button>
-          </div>
-        </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Select</th>
-              <th>Name</th>
-              <th>Size</th>
-              <th>Uploaded</th>
-            </tr>
-          </thead>
-          <tbody>
-            {files.map((file) => (
-              <tr key={file.fileId}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(file.fileId)}
-                    onChange={() => toggleSelection(file.fileId)}
-                  />
-                </td>
-                <td>{file.name}</td>
-                <td>{file.sizeBytes} B</td>
-                <td>{new Date(file.uploadedAt).toLocaleString()}</td>
-              </tr>
-            ))}
-            {!files.length && (
-              <tr>
-                <td colSpan={4}>No files uploaded yet.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
-
-      <ReportPanel
-        reports={reports}
-        selectedReportId={selectedReportId}
-        onSelectReport={setSelectedReportId}
-      />
+      {view === "reports" && (
+        <ReportPanel
+          reports={reports}
+          selectedReportId={selectedReportId}
+          onSelectReport={setSelectedReportId}
+        />
+      )}
       {message && <p className="ok">{message}</p>}
       {error && <p className="error">{error}</p>}
     </main>

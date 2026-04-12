@@ -1,12 +1,18 @@
 import { FormEvent, useEffect, useState } from "react";
 import { getDataStatus, saveDataLimits } from "../api";
 
+const BYTES_PER_MB = 1024 * 1024;
+
 interface DataStatus {
   publicIp: string;
   port: number;
   storageUsedBytes: number;
   maxUploadMbps: number;
   maxDownloadMbps: number;
+}
+
+function formatMb(bytes: number): string {
+  return `${(bytes / BYTES_PER_MB).toFixed(3)} MB`;
 }
 
 export default function DataNodePage() {
@@ -33,7 +39,7 @@ export default function DataNodePage() {
     setMessage("");
     const up = Number(maxUpload);
     const down = Number(maxDownload);
-    if (up <= 0 || down <= 0 || up > 1000 || down > 1000) {
+    if (!Number.isFinite(up) || !Number.isFinite(down) || up <= 0 || down <= 0 || up > 1000 || down > 1000) {
       setError("Both limits must be in range (0, 1000].");
       return;
     }
@@ -55,7 +61,7 @@ export default function DataNodePage() {
             <p>
               Public endpoint: <strong>{status.publicIp}</strong>:<strong>{status.port}</strong>
             </p>
-            <p>Storage used: {status.storageUsedBytes} bytes</p>
+            <p>Storage used: {formatMb(status.storageUsedBytes)}</p>
           </>
         )}
         <form className="stack" onSubmit={onSubmit}>

@@ -1,5 +1,7 @@
 import type { TransferReport } from "../types";
 
+const BYTES_PER_MB = 1024 * 1024;
+
 function formatMbps(value: number) {
   return `${value.toFixed(3)} Mb/s`;
 }
@@ -9,11 +11,15 @@ function formatSeconds(value: number) {
 }
 
 function formatWhen(iso: string) {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
     return iso;
   }
+  return parsed.toLocaleString();
+}
+
+function formatSizeMb(bytes: number) {
+  return `${(bytes / BYTES_PER_MB).toFixed(3)} MB`;
 }
 
 export default function ReportPanel({
@@ -41,7 +47,7 @@ export default function ReportPanel({
     <section className="card">
       <div className="row-space">
         <h2>Transfer Reports</h2>
-        <a className="button" href={`/api/client/reports/${report.reportId}/csv`}>
+        <a className="button" href={`/api/client/reports/${encodeURIComponent(report.reportId)}/csv`}>
           Export CSV
         </a>
       </div>
@@ -77,7 +83,7 @@ export default function ReportPanel({
         <tbody>
           <tr>
             <td>Entire file</td>
-            <td>{report.sizeBytes} B</td>
+            <td>{formatSizeMb(report.sizeBytes)}</td>
             <td>{formatSeconds(report.elapsedSeconds)}</td>
             <td>{formatMbps(report.throughputMbps)}</td>
           </tr>
@@ -86,7 +92,7 @@ export default function ReportPanel({
               <td>
                 Block #{block.index} @ {block.nodeHost}:{block.nodePort}
               </td>
-              <td>{block.sizeBytes} B</td>
+              <td>{formatSizeMb(block.sizeBytes)}</td>
               <td>{formatSeconds(block.elapsedSeconds)}</td>
               <td>{formatMbps(block.throughputMbps)}</td>
             </tr>
