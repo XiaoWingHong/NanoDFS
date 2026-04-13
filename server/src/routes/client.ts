@@ -10,7 +10,6 @@ import { blockCountForFileSize, readFileBlock } from "../services/splitter.js";
 import { elapsedSeconds, throughputMbps } from "../services/metrics.js";
 import { roundRobinAssignments, runWithConcurrency } from "../services/scheduler.js";
 import { validateDataNodesInput } from "../services/validation.js";
-import { escapeCsvRow } from "../services/csv.js";
 
 const PROCESSING_START_HEADER = "x-processing-start-ms";
 const PROCESSING_END_HEADER = "x-processing-end-ms";
@@ -158,69 +157,6 @@ async function cleanupUploadedBlocks(
       }
     })
   );
-}
-
-function csvReport(report: any): string {
-  const lines = [
-    escapeCsvRow([
-      "scope",
-      "fileName",
-      "operation",
-      "sizeBytes",
-      "elapsedSeconds",
-      "throughputMbps",
-      "blockIndex",
-      "blockId",
-      "nodeHost",
-      "nodePort",
-      "blockSizeBytes",
-      "nodeCount",
-      "concurrency",
-      "startedAt",
-      "finishedAt"
-    ])
-  ];
-  lines.push(
-    escapeCsvRow([
-      "file",
-      report.fileName,
-      report.operation,
-      report.sizeBytes,
-      report.elapsedSeconds.toFixed(6),
-      report.throughputMbps.toFixed(6),
-      "",
-      "",
-      "",
-      "",
-      report.blockSizeBytes,
-      report.nodeCount,
-      report.concurrency,
-      report.startedAt,
-      report.finishedAt
-    ])
-  );
-  for (const block of report.blocks) {
-    lines.push(
-      escapeCsvRow([
-        "block",
-        report.fileName,
-        report.operation,
-        block.sizeBytes,
-        block.elapsedSeconds.toFixed(6),
-        block.throughputMbps.toFixed(6),
-        block.index,
-        block.blockId,
-        block.nodeHost,
-        block.nodePort,
-        report.blockSizeBytes,
-        report.nodeCount,
-        report.concurrency,
-        "",
-        ""
-      ])
-    );
-  }
-  return lines.join("\n");
 }
 
 export function clientRouter(metadata: MetadataStore, options: ClientRouterOptions) {
@@ -489,20 +425,6 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
       return res.status(404).json({ error: "Report not found" });
     }
     return res.json(report);
-  });
-
-  router.get("/reports/:reportId/csv", async (req, res) => {
-    const report = await metadata.getReport(req.params.reportId);
-    if (!report) {
-      return res.status(404).json({ error: "Report not found" });
-    }
-    const csv = csvReport(report);
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${encodeURIComponent(report.fileName)}-${report.operation}-report.csv"`
-    );
-    return res.send(csv);
   });
 
   return router;

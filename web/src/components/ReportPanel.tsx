@@ -45,12 +45,7 @@ export default function ReportPanel({
 
   return (
     <section className="card">
-      <div className="row-space">
-        <h2>Transfer Reports</h2>
-        <a className="button" href={`/api/client/reports/${encodeURIComponent(report.reportId)}/csv`}>
-          Export CSV
-        </a>
-      </div>
+      <h2>Transfer Reports</h2>
       <label className="stack">
         <span className="tiny">Select report</span>
         <select

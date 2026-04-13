@@ -2,7 +2,7 @@
 
 NanoDFS is a HDFS-inspired distributed file system:
 
-- **Client node**: file manager, upload/download/delete, node config, reporting + CSV export.
+- **Client node**: file manager, upload/download/delete, node config, reporting.
 - **Data node**: block storage server with local disk usage display and configurable upload/download rate limits.
 
 ## Quick start
