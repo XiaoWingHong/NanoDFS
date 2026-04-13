@@ -4,6 +4,7 @@ export interface TransferProgress {
   loaded: number;
   total: number | null;
 }
+export type UploadPhase = "client" | "data";
 
 const UPLOAD_TIMEOUT_MS = 300_000;
 
@@ -56,7 +57,8 @@ export async function uploadFiles(files: File[]) {
 
 export async function uploadFilesWithProgress(
   files: File[],
-  onProgress?: (progress: TransferProgress) => void
+  onProgress?: (progress: TransferProgress) => void,
+  onPhase?: (phase: UploadPhase) => void
 ) {
   const form = new FormData();
   for (const file of files) {
@@ -69,12 +71,19 @@ export async function uploadFilesWithProgress(
     xhr.timeout = UPLOAD_TIMEOUT_MS;
 
     xhr.upload.onprogress = (event) => {
+      onPhase?.("client");
       if (onProgress) {
         onProgress({
           loaded: event.loaded,
           total: event.lengthComputable ? event.total : null
         });
       }
+    };
+    xhr.upload.onloadstart = () => {
+      onPhase?.("client");
+    };
+    xhr.upload.onload = () => {
+      onPhase?.("data");
     };
 
     xhr.onload = () => {

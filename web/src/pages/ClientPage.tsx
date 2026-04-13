@@ -7,15 +7,15 @@ import {
   getReport,
   listFiles,
   saveClientConfig,
-  uploadFiles
+  uploadFilesWithProgress
 } from "../api";
+import type { UploadPhase } from "../api";
 import type { ClientConfig, FileRecord, TransferReport } from "../types";
 
 const BYTES_PER_MB = 1024 * 1024;
 const CLIENT_HASH_PREFIX = "#/client/";
 
 type ClientView = "configuration" | "transfers" | "reports";
-type UploadPhase = "client" | "data" | null;
 type DownloadPhase = "data" | "client" | null;
 
 function blockSizeBytesToMb(bytes: number): number {
@@ -74,7 +74,7 @@ export default function ClientPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [uploadPhase, setUploadPhase] = useState<UploadPhase>(null);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase | null>(null);
   const [downloadPhase, setDownloadPhase] = useState<DownloadPhase>(null);
   const [view, setView] = useState<ClientView>(() => parseViewFromHash(window.location.hash));
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -155,8 +155,7 @@ export default function ClientPage() {
     setMessage("");
     setError("");
     try {
-      setUploadPhase("data");
-      const response = await uploadFiles(uploadQueue);
+      const response = await uploadFilesWithProgress(uploadQueue, undefined, (phase) => setUploadPhase(phase));
       const incoming = response.results.map((r) => r.report);
       setReports((prev) => mergeReports(prev, incoming));
       setSelectedReportId(incoming[0]?.reportId ?? null);
