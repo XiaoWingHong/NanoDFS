@@ -204,7 +204,10 @@ export default function ClientPage() {
       const incoming: TransferReport[] = [];
       for (let index = 0; index < selectedFiles.length; index += 1) {
         const file = selectedFiles[index];
-        const { blob, reportId } = await downloadFileWithProgress(file.fileId, undefined, (phase) => setDownloadPhase(phase));
+        setDownloadPhase("data");
+        const { blob, reportId } = await downloadFileWithProgress(file.fileId);
+        setDownloadPhase("client");
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
