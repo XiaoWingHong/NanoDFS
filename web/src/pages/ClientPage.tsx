@@ -204,10 +204,15 @@ export default function ClientPage() {
       const incoming: TransferReport[] = [];
       for (let index = 0; index < selectedFiles.length; index += 1) {
         const file = selectedFiles[index];
-        setDownloadPhase("data");
-        const { blob, reportId } = await downloadFileWithProgress(file.fileId);
-        setDownloadPhase("client");
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const { blob, reportId } = await downloadFileWithProgress(
+          file.fileId,
+          () => setDownloadPhase("client"),
+          (phase) => {
+            if (phase === "data") {
+              setDownloadPhase("data");
+            }
+          }
+        );
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
@@ -376,7 +381,7 @@ export default function ClientPage() {
               </tbody>
             </table>
             {downloadPhase === "data" && <p className="tiny">Downloading from data node ...</p>}
-            {downloadPhase === "client" && <p className="tiny">Downloading to client node ...</p>}
+            {downloadPhase === "client" && <p className="tiny">Downloading from client node ...</p>}
           </section>
         </>
       )}

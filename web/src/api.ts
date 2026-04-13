@@ -137,7 +137,9 @@ export async function downloadFileWithProgress(
   onPhase?: (phase: DownloadPhase) => void
 ) {
   onPhase?.("data");
-  const response = await fetch(`/api/client/files/${encodeURIComponent(fileId)}/download`);
+  const response = await fetch(`/api/client/files/${encodeURIComponent(fileId)}/download`, {
+    cache: "no-store"
+  });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Download failed" }));
     throw new Error(error.error || "Download failed");

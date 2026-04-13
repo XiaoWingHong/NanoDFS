@@ -314,11 +314,10 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
     }
     const cfg = await metadata.getClientConfig();
     const nodeById = new Map(cfg.dataNodes.map((node) => [node.id, node]));
-    let transferStartMs: number | null = null;
-    let transferEndMs: number | null = null;
     const reportId = randomUUID();
 
     const sorted = [...file.blocks].sort((a, b) => a.index - b.index);
+    const routeStartMs = Date.now();
     try {
       const blockResults = await runWithConcurrency(sorted, cfg.maxConcurrentTasks, async (block) => {
         const node = resolveDataNodeForBlock(block, nodeById);
@@ -327,8 +326,6 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
         }
         const localStartMs = Date.now();
         const { buffer, timing } = await fetchBlockBuffer(node, block.blockId, localStartMs);
-        transferStartMs = transferStartMs === null ? timing.startMs : Math.min(transferStartMs, timing.startMs);
-        transferEndMs = transferEndMs === null ? timing.endMs : Math.max(transferEndMs, timing.endMs);
         const elapsed = elapsedSeconds(timing.startMs, timing.endMs);
         const metric: BlockMetric = {
           blockId: block.blockId,
@@ -351,12 +348,10 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
 
       const blockMetrics = blockResults.map((r) => r.metric);
       const body = Buffer.concat(blockResults.map((r) => r.buffer));
-      const fallbackNow = Date.now();
-      const effectiveStartMs = transferStartMs ?? fallbackNow;
-      const effectiveEndMs = transferEndMs ?? fallbackNow;
-      const startedAt = new Date(effectiveStartMs).toISOString();
-      const finishedAt = new Date(effectiveEndMs).toISOString();
-      const totalElapsed = elapsedSeconds(effectiveStartMs, effectiveEndMs);
+      const routeEndMs = Date.now();
+      const startedAt = new Date(routeStartMs).toISOString();
+      const finishedAt = new Date(routeEndMs).toISOString();
+      const totalElapsed = elapsedSeconds(routeStartMs, routeEndMs);
       await metadata.saveReport(
         {
           operation: "download",
@@ -375,6 +370,9 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
         reportId
       );
 
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       res.setHeader("Content-Type", "application/octet-stream");
       res.setHeader("Content-Length", String(file.sizeBytes));
       res.setHeader("X-Report-Id", reportId);
