@@ -51,6 +51,17 @@ function asMb(value: number): string {
   return `${(value / BYTES_PER_MB).toFixed(3)} MB`;
 }
 
+function createNodeId(): string {
+  if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function") {
+    try {
+      return globalThis.crypto.randomUUID();
+    } catch {
+      // Fall through to non-crypto fallback for older or restricted runtimes.
+    }
+  }
+  return `node-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export default function ClientPage() {
   const [config, setConfig] = useState<ClientConfig>(DEFAULT_CONFIG);
   const [files, setFiles] = useState<FileRecord[]>([]);
@@ -99,7 +110,7 @@ export default function ClientPage() {
   function addNode() {
     setConfig((prev) => ({
       ...prev,
-      dataNodes: [...prev.dataNodes, { id: crypto.randomUUID(), host: "127.0.0.1", port: 3000, enabled: true }]
+      dataNodes: [...prev.dataNodes, { id: createNodeId(), host: "127.0.0.1", port: 3000, enabled: true }]
     }));
   }
 
