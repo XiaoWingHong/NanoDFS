@@ -1,0 +1,16 @@
+services:
+  client:
+    image: nanodfs:latest
+    container_name: nanodfs-client
+    environment:
+      - PORT=3000
+      - PUBLIC_HOST=127.0.0.1
+      - PUBLIC_PORT=3000
+      - NANODFS_RUNTIME_DIR=/app/runtime
+    ports:
+      - "3000:3000"
+    volumes:
+      - client_runtime:/app/runtime
+
+volumes:
+  client_runtime:
