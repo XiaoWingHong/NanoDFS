@@ -15,6 +15,8 @@ const BYTES_PER_MB = 1024 * 1024;
 const CLIENT_HASH_PREFIX = "#/client/";
 
 type ClientView = "configuration" | "transfers" | "reports";
+type UploadPhase = "client" | "data" | null;
+type DownloadPhase = "data" | "client" | null;
 
 function blockSizeBytesToMb(bytes: number): number {
   return bytes / BYTES_PER_MB;
@@ -72,7 +74,8 @@ export default function ClientPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>(null);
+  const [downloadPhase, setDownloadPhase] = useState<DownloadPhase>(null);
   const [view, setView] = useState<ClientView>(() => parseViewFromHash(window.location.hash));
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -148,10 +151,11 @@ export default function ClientPage() {
       return;
     }
     setBusy(true);
-    setIsUploading(true);
+    setUploadPhase("client");
     setMessage("");
     setError("");
     try {
+      setUploadPhase("data");
       const response = await uploadFiles(uploadQueue);
       const incoming = response.results.map((r) => r.report);
       setReports((prev) => mergeReports(prev, incoming));
@@ -165,7 +169,7 @@ export default function ClientPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
-      setIsUploading(false);
+      setUploadPhase(null);
       setBusy(false);
     }
   }
@@ -196,6 +200,7 @@ export default function ClientPage() {
       return;
     }
     setBusy(true);
+    setDownloadPhase("data");
     setError("");
     setMessage("");
     try {
@@ -203,6 +208,7 @@ export default function ClientPage() {
       for (let index = 0; index < selectedFiles.length; index += 1) {
         const file = selectedFiles[index];
         const { blob, reportId } = await downloadFileWithProgress(file.fileId);
+        setDownloadPhase("client");
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
@@ -211,6 +217,9 @@ export default function ClientPage() {
         URL.revokeObjectURL(url);
         if (reportId) {
           incoming.push(await getReport(reportId));
+        }
+        if (index < selectedFiles.length - 1) {
+          setDownloadPhase("data");
         }
       }
       if (incoming.length) {
@@ -221,6 +230,7 @@ export default function ClientPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Download failed");
     } finally {
+      setDownloadPhase(null);
       setBusy(false);
     }
   }
@@ -322,7 +332,8 @@ export default function ClientPage() {
                 Upload selected files
               </button>
             </form>
-            {isUploading && <p className="tiny">Uploading ...</p>}
+            {uploadPhase === "client" && <p className="tiny">Uploading to client node ...</p>}
+            {uploadPhase === "data" && <p className="tiny">Uploading to data node ...</p>}
           </section>
 
           <section className="card">
@@ -368,6 +379,8 @@ export default function ClientPage() {
                 )}
               </tbody>
             </table>
+            {downloadPhase === "data" && <p className="tiny">Downloading from data node ...</p>}
+            {downloadPhase === "client" && <p className="tiny">Downloading to client node ...</p>}
           </section>
         </>
       )}
