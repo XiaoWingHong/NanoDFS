@@ -5,6 +5,7 @@ export interface TransferProgress {
   total: number | null;
 }
 export type UploadPhase = "client" | "data";
+export type DownloadPhase = "data" | "client";
 
 const UPLOAD_TIMEOUT_MS = 300_000;
 
@@ -132,8 +133,10 @@ export async function getReport(reportId: string) {
 
 export async function downloadFileWithProgress(
   fileId: string,
-  onProgress?: (progress: TransferProgress) => void
+  onProgress?: (progress: TransferProgress) => void,
+  onPhase?: (phase: DownloadPhase) => void
 ) {
+  onPhase?.("data");
   const response = await fetch(`/api/client/files/${encodeURIComponent(fileId)}/download`);
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Download failed" }));
@@ -149,6 +152,7 @@ export async function downloadFileWithProgress(
   if (!body) {
     const blob = await response.blob();
     onProgress?.({ loaded: blob.size, total: blob.size || total });
+    onPhase?.("client");
     return { blob, reportId };
   }
 
@@ -165,12 +169,14 @@ export async function downloadFileWithProgress(
       const chunkCopy = Uint8Array.from(value);
       chunks.push(chunkCopy);
       loaded += chunkCopy.length;
+      onPhase?.("data");
       onProgress?.({ loaded, total });
     }
   }
 
   const blob = new Blob(chunks as unknown as BlobPart[]);
   onProgress?.({ loaded, total: total ?? loaded });
+  onPhase?.("client");
   return { blob, reportId };
 }
 

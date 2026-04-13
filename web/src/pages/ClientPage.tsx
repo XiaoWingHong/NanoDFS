@@ -9,14 +9,13 @@ import {
   saveClientConfig,
   uploadFilesWithProgress
 } from "../api";
-import type { UploadPhase } from "../api";
+import type { DownloadPhase, UploadPhase } from "../api";
 import type { ClientConfig, FileRecord, TransferReport } from "../types";
 
 const BYTES_PER_MB = 1024 * 1024;
 const CLIENT_HASH_PREFIX = "#/client/";
 
 type ClientView = "configuration" | "transfers" | "reports";
-type DownloadPhase = "data" | "client" | null;
 
 function blockSizeBytesToMb(bytes: number): number {
   return bytes / BYTES_PER_MB;
@@ -75,7 +74,7 @@ export default function ClientPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase | null>(null);
-  const [downloadPhase, setDownloadPhase] = useState<DownloadPhase>(null);
+  const [downloadPhase, setDownloadPhase] = useState<DownloadPhase | null>(null);
   const [view, setView] = useState<ClientView>(() => parseViewFromHash(window.location.hash));
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -199,15 +198,13 @@ export default function ClientPage() {
       return;
     }
     setBusy(true);
-    setDownloadPhase("data");
     setError("");
     setMessage("");
     try {
       const incoming: TransferReport[] = [];
       for (let index = 0; index < selectedFiles.length; index += 1) {
         const file = selectedFiles[index];
-        const { blob, reportId } = await downloadFileWithProgress(file.fileId);
-        setDownloadPhase("client");
+        const { blob, reportId } = await downloadFileWithProgress(file.fileId, undefined, (phase) => setDownloadPhase(phase));
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
@@ -216,9 +213,6 @@ export default function ClientPage() {
         URL.revokeObjectURL(url);
         if (reportId) {
           incoming.push(await getReport(reportId));
-        }
-        if (index < selectedFiles.length - 1) {
-          setDownloadPhase("data");
         }
       }
       if (incoming.length) {
