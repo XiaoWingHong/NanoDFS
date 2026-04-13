@@ -69,9 +69,17 @@ export async function uploadFilesWithProgress(
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/client/upload");
     xhr.timeout = UPLOAD_TIMEOUT_MS;
+    let inDataPhase = false;
+    const emitPhase = (phase: UploadPhase) => {
+      if (phase === "data") {
+        inDataPhase = true;
+      }
+      onPhase?.(phase);
+    };
 
     xhr.upload.onprogress = (event) => {
-      onPhase?.("client");
+      const uploadComplete = event.lengthComputable && event.total > 0 && event.loaded >= event.total;
+      emitPhase(inDataPhase || uploadComplete ? "data" : "client");
       if (onProgress) {
         onProgress({
           loaded: event.loaded,
@@ -80,10 +88,10 @@ export async function uploadFilesWithProgress(
       }
     };
     xhr.upload.onloadstart = () => {
-      onPhase?.("client");
+      emitPhase("client");
     };
     xhr.upload.onload = () => {
-      onPhase?.("data");
+      emitPhase("data");
     };
 
     xhr.onload = () => {
