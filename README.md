@@ -18,89 +18,37 @@ cd NanoDFS
 
 ### 2. Build the Docker image
 
-From the repository root (where the `Dockerfile` lives):
+if docker is not installed, please install it first (for Ubuntu 22.04+):
 
 ```bash
-docker build -t nanodfs:latest .
+sudo apt update
+sudo apt install docker.io
+sudo apt install docker-compose-v2
+```
+
+From the repository root:
+
+```bash
+sudo docker build -t nanodfs:latest .
 ```
 
 ### 3. Run with Docker Compose
 
-Use **two** compose files: one stack for the **client** and one for **data** nodes. Build the image once; both stacks reference `image: nanodfs:latest`.
-
-#### `docker-compose.yml` (client node)
-
-```yaml
-services:
-  client:
-    image: nanodfs:latest
-    container_name: nanodfs-client
-    environment:
-      - PORT=3000
-      - PUBLIC_HOST=127.0.0.1
-      - PUBLIC_PORT=3000
-      - NANODFS_RUNTIME_DIR=/app/runtime
-    ports:
-      - "3000:3000"
-    volumes:
-      - client_runtime:/app/runtime
-
-volumes:
-  client_runtime:
-```
-
-Start it:
+#### Data Node:
 
 ```bash
-docker compose -f docker-compose.yml up -d
+docker compose -f docker-compose.data.yml up -d
 ```
 
-Open **http://HOST_IP:3000**, choose **Client node**, then configure data nodes using the **host IP and mapped host ports** of your data nodes containers.
+Open **[http://HOST_IP:4001](http://HOST_IP:4001)** and **[http://HOST_IP:4002](http://HOST_IP:4002)**, choose **Data node**, and set rate limits as needed.
 
-#### `docker-compose.yml` (data nodes)
-
-Example with two data-node containers on different host ports:
-
-```yaml
-services:
-  data1:
-    image: nanodfs:latest
-    container_name: nanodfs-data-1
-    environment:
-      - PORT=3000
-      - PUBLIC_HOST=127.0.0.1
-      - PUBLIC_PORT=4001
-      - NANODFS_RUNTIME_DIR=/app/runtime
-    ports:
-      - "4001:3000"
-    volumes:
-      - data1_runtime:/app/runtime
-
-  data2:
-    image: nanodfs:latest
-    container_name: nanodfs-data-2
-    environment:
-      - PORT=3000
-      - PUBLIC_HOST=127.0.0.1
-      - PUBLIC_PORT=4002
-      - NANODFS_RUNTIME_DIR=/app/runtime
-    ports:
-      - "4002:3000"
-    volumes:
-      - data2_runtime:/app/runtime
-
-volumes:
-  data1_runtime:
-  data2_runtime:
-```
-
-Start it:
+#### Client Node:
 
 ```bash
-docker compose -f docker-compose.yml up -d
+docker compose -f docker-compose.client.yml up -d
 ```
 
-On each data container, open the mapped URL (e.g. **http://HOST_IP:4001** and **http://HOST_IP:4002**), choose **Data node**, and set rate limits as needed.
+Open **[http://HOST_IP:3000](http://HOST_IP:3000)**, choose **Client node**, then configure data nodes using the **host IP and ports (4001 & 4002)** of your data nodes.
 
 ---
 
