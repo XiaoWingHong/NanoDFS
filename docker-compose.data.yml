@@ -25,6 +25,34 @@ services:
     volumes:
       - data2_runtime:/app/runtime
 
+  data3:
+    image: nanodfs:latest
+    container_name: nanodfs-data-3
+    environment:
+      - PORT=3000
+      - PUBLIC_HOST=127.0.0.1
+      - PUBLIC_PORT=4003
+      - NANODFS_RUNTIME_DIR=/app/runtime
+    ports:
+      - "4003:3000"
+    volumes:
+      - data3_runtime:/app/runtime
+
+  data4:
+    image: nanodfs:latest
+    container_name: nanodfs-data-4
+    environment:
+      - PORT=3000
+      - PUBLIC_HOST=127.0.0.1
+      - PUBLIC_PORT=4004
+      - NANODFS_RUNTIME_DIR=/app/runtime
+    ports:
+      - "4004:3000"
+    volumes:
+      - data4_runtime:/app/runtime
+
 volumes:
   data1_runtime:
   data2_runtime:
+  data3_runtime:
+  data4_runtime:

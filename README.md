@@ -40,7 +40,7 @@ sudo docker build -t nanodfs:latest .
 sudo docker compose -f docker-compose.data.yml up -d
 ```
 
-Open **[http://HOST_IP:4001](http://HOST_IP:4001)** and **[http://HOST_IP:4002](http://HOST_IP:4002)**, choose **Data node**, and set rate limits as needed.
+Open **[http://HOST_IP:PORT](http://HOST_IP:PORT)** (default ports: 4001 - 4004), choose **Data node**, and set rate limits as needed.
 
 #### Client Node:
 
@@ -48,7 +48,7 @@ Open **[http://HOST_IP:4001](http://HOST_IP:4001)** and **[http://HOST_IP:4002](
 sudo docker compose -f docker-compose.client.yml up -d
 ```
 
-Open **[http://HOST_IP:3000](http://HOST_IP:3000)**, choose **Client node**, then configure data nodes using the **host IP and ports (4001 & 4002)** of your data nodes.
+Open **[http://HOST_IP:PORT](http://HOST_IP:PORT)** (default port: 3000), choose **Client node**, then configure data nodes using the **host IP and ports** of your data nodes.
 
 ---
 
