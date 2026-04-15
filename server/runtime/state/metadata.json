@@ -2,7 +2,6 @@
   "role": "client",
   "clientConfig": {
     "blockSizeBytes": 1048576,
-    "maxConcurrentTasks": 4,
     "dataNodes": [
       {
         "id": "f7d4f86e-d598-413f-abf0-8059d8ddaba9",

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { validateDataNodesInput } from "./validation.js";
 import type {
   ClientConfig,
   FileRecord,
@@ -9,11 +10,32 @@ import type {
   TransferReport
 } from "../types.js";
 
+/** Strips legacy fields (e.g. maxConcurrentTasks) and validates dataNodes when loading from disk. */
+function normalizeClientConfig(raw: unknown): ClientConfig {
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const blockSizeBytes = Number(o.blockSizeBytes);
+  const blockSize =
+    Number.isFinite(blockSizeBytes) && blockSizeBytes >= 1024
+      ? blockSizeBytes
+      : 1024 * 1024;
+  const dataNodesRaw = Array.isArray(o.dataNodes) ? o.dataNodes : [];
+  const validated = validateDataNodesInput(dataNodesRaw, randomUUID);
+  return {
+    blockSizeBytes: blockSize,
+    dataNodes: validated.ok ? validated.nodes : []
+  };
+}
+
+function parseNanoState(raw: string): NanoState {
+  const state = JSON.parse(raw) as NanoState;
+  state.clientConfig = normalizeClientConfig(state.clientConfig);
+  return state;
+}
+
 const DEFAULT_STATE: NanoState = {
   role: "unselected",
   clientConfig: {
     blockSizeBytes: 1024 * 1024,
-    maxConcurrentTasks: 4,
     dataNodes: []
   },
   dataConfig: {
@@ -63,7 +85,7 @@ export class MetadataStore {
         await this.write(DEFAULT_STATE);
       }
       const raw = await fs.readFile(this.statePath, "utf8");
-      return JSON.parse(raw) as NanoState;
+      return parseNanoState(raw);
     });
   }
 
@@ -161,7 +183,7 @@ export class MetadataStore {
       await this.write(DEFAULT_STATE);
     }
     const raw = await fs.readFile(this.statePath, "utf8");
-    return JSON.parse(raw) as NanoState;
+    return parseNanoState(raw);
   }
 
   private async write(state: NanoState): Promise<void> {

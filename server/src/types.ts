@@ -9,7 +9,6 @@ export interface DataNodeEndpoint {
 
 export interface ClientConfig {
   blockSizeBytes: number;
-  maxConcurrentTasks: number;
   dataNodes: DataNodeEndpoint[];
 }
 

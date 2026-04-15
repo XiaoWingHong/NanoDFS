@@ -170,13 +170,9 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
 
   router.put("/config", async (req, res) => {
     const blockSizeBytes = Number(req.body?.blockSizeBytes);
-    const maxConcurrentTasks = Number(req.body?.maxConcurrentTasks);
     const dataNodes = Array.isArray(req.body?.dataNodes) ? req.body.dataNodes : [];
     if (!Number.isFinite(blockSizeBytes) || blockSizeBytes < 1024) {
       return res.status(400).json({ error: "blockSizeBytes must be >= 1024" });
-    }
-    if (!Number.isFinite(maxConcurrentTasks) || maxConcurrentTasks < 1 || maxConcurrentTasks > 64) {
-      return res.status(400).json({ error: "maxConcurrentTasks must be between 1 and 64" });
     }
     const validated = validateDataNodesInput(dataNodes, randomUUID);
     if (!validated.ok) {
@@ -184,7 +180,6 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
     }
     const config = await metadata.setClientConfig({
       blockSizeBytes,
-      maxConcurrentTasks,
       dataNodes: validated.nodes
     });
     return res.json(config);
@@ -201,6 +196,7 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
     }
     const config = await metadata.getClientConfig();
     const nodes = config.dataNodes.filter((node) => node.enabled);
+    const transferConcurrency = nodes.length;
     if (!nodes.length) {
       for (const f of files) {
         await fsPromises.unlink(f.path).catch(() => {});
@@ -226,7 +222,7 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
         let transferEndMs: number | null = null;
         const handle = await fsPromises.open(file.path, "r");
         try {
-          blockMetrics = await runWithConcurrency(assignments, config.maxConcurrentTasks, async (assignment) => {
+          blockMetrics = await runWithConcurrency(assignments, transferConcurrency, async (assignment) => {
             const payload = await readFileBlock(handle, assignment.index, blockSizeBytes, fileSize);
             const blockId = `${fileId}-${assignment.index}-${randomUUID().slice(0, 8)}`;
             const localStartMs = Date.now();
@@ -288,7 +284,7 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
           sizeBytes: fileSize,
           blockSizeBytes: config.blockSizeBytes,
           nodeCount: nodes.length,
-          concurrency: config.maxConcurrentTasks,
+          concurrency: transferConcurrency,
           startedAt,
           finishedAt,
           elapsedSeconds: totalElapsed,
@@ -313,13 +309,17 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
       return res.status(404).json({ error: "File not found" });
     }
     const cfg = await metadata.getClientConfig();
+    const transferConcurrency = cfg.dataNodes.filter((n) => n.enabled).length;
+    if (transferConcurrency < 1) {
+      return res.status(400).json({ error: "At least one enabled data node is required" });
+    }
     const nodeById = new Map(cfg.dataNodes.map((node) => [node.id, node]));
     const reportId = randomUUID();
 
     const sorted = [...file.blocks].sort((a, b) => a.index - b.index);
     const routeStartMs = Date.now();
     try {
-      const blockResults = await runWithConcurrency(sorted, cfg.maxConcurrentTasks, async (block) => {
+      const blockResults = await runWithConcurrency(sorted, transferConcurrency, async (block) => {
         const node = resolveDataNodeForBlock(block, nodeById);
         if (!node) {
           throw new Error(`Missing data node configuration for block ${block.blockId}`);
@@ -360,7 +360,7 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
           sizeBytes: file.sizeBytes,
           blockSizeBytes: file.blockSizeBytes,
           nodeCount: new Set(file.blocks.map((b) => b.nodeId)).size,
-          concurrency: cfg.maxConcurrentTasks,
+          concurrency: transferConcurrency,
           startedAt,
           finishedAt,
           elapsedSeconds: totalElapsed,

@@ -31,7 +31,6 @@ function mbToBlockSizeBytes(mb: number): number {
 
 const DEFAULT_CONFIG: ClientConfig = {
   blockSizeBytes: BYTES_PER_MB,
-  maxConcurrentTasks: 4,
   dataNodes: []
 };
 
@@ -270,16 +269,6 @@ export default function ClientPage() {
                     blockSizeBytes: mbToBlockSizeBytes(Number(e.target.value))
                   }))
                 }
-              />
-            </label>
-            <label>
-              Max concurrent tasks
-              <input
-                type="number"
-                min={1}
-                max={64}
-                value={config.maxConcurrentTasks}
-                onChange={(e) => setConfig((prev) => ({ ...prev, maxConcurrentTasks: Number(e.target.value) }))}
               />
             </label>
             <div className="row-space">
