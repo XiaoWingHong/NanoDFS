@@ -3,7 +3,3 @@ node_modules
 **/dist
 **/coverage
 runtime
-.git
-.cursor
-.agents
-agent-transcripts

@@ -20,7 +20,6 @@ interface BlockTimingRange {
 }
 
 export interface ClientRouterOptions {
-  /** Temp directory for disk-backed multipart uploads */
   uploadDir: string;
 }
 
@@ -153,7 +152,6 @@ async function cleanupUploadedBlocks(
       try {
         await deleteBlock(node, r.blockId);
       } catch {
-        // Best-effort cleanup of orphaned blocks on data nodes.
       }
     })
   );
@@ -385,7 +383,6 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
       try {
         res.destroy();
       } catch {
-        // ignore
       }
       return;
     }
@@ -409,7 +406,6 @@ export function clientRouter(metadata: MetadataStore, options: ClientRouterOptio
           try {
             await deleteBlock(node, block.blockId);
           } catch {
-            // Idempotent delete: best effort cleanup on data nodes.
           }
         })
       )

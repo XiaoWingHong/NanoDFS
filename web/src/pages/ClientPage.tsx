@@ -56,7 +56,6 @@ function createNodeId(): string {
     try {
       return globalThis.crypto.randomUUID();
     } catch {
-      // Fall through to non-crypto fallback for older or restricted runtimes.
     }
   }
   return `node-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;

@@ -10,7 +10,6 @@ import type {
   TransferReport
 } from "../types.js";
 
-/** Strips legacy fields (e.g. maxConcurrentTasks) and validates dataNodes when loading from disk. */
 function normalizeClientConfig(raw: unknown): ClientConfig {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const blockSizeBytes = Number(o.blockSizeBytes);
@@ -65,7 +64,6 @@ export class MetadataStore {
     return next;
   }
 
-  /** One-time setup (sync constructor callers); use before serving traffic if needed. */
   async ensureStorage(): Promise<void> {
     await this.enqueue(async () => {
       await fs.mkdir(this.stateDir, { recursive: true });

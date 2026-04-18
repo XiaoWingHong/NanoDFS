@@ -17,7 +17,6 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       const body = await response.json();
       message = body.error || message;
     } catch {
-      // keep default message
     }
     throw new Error(message);
   }
@@ -105,7 +104,6 @@ export async function uploadFilesWithProgress(
         const parsed = JSON.parse(xhr.responseText) as { error?: string };
         error = parsed.error || error;
       } catch {
-        // keep fallback message
       }
       reject(new Error(error));
     };

@@ -2,7 +2,6 @@ export function isValidRateLimit(value: number): boolean {
   return Number.isFinite(value) && value > 0 && value <= 1000;
 }
 
-/** TCP/UDP port range */
 export function isValidDataNodePort(port: number): boolean {
   return Number.isInteger(port) && port >= 1 && port <= 65535;
 }
@@ -42,9 +41,6 @@ export interface ValidatedDataNode {
   enabled: boolean;
 }
 
-/**
- * Strict validation for client data node entries: non-empty host, integer port 1–65535.
- */
 export function validateDataNodesInput(
   dataNodes: unknown[],
   newId: () => string

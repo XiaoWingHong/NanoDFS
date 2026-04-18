@@ -49,32 +49,3 @@ sudo docker compose -f docker-compose.client.yml up -d
 ```
 
 Open **[http://HOST_IP:PORT](http://HOST_IP:PORT)** (default port: 3000), choose **Client node**, then configure data nodes using the **host IP and ports** of your data nodes.
-
----
-
-## Project structure
-
-```text
-.
-├── Dockerfile                 # Multi-stage build: web + server, single runtime image
-├── package.json               # Workspace root; scripts: build, start
-├── server/
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── index.ts           # Express app, static UI, API mount
-│       ├── types.ts
-│       ├── routes/            # bootstrap, client, data HTTP routes
-│       └── services/          # metadata, blocks, scheduling, metrics, etc.
-└── web/
-    ├── package.json
-    ├── vite.config.ts
-    ├── index.html
-    └── src/
-        ├── App.tsx
-        ├── api.ts
-        ├── pages/             # Role select, client, data node UI
-        ├── components/        # e.g. report panel
-        └── styles/
-```
-
