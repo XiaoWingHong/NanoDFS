@@ -1,9 +1,6 @@
 # NanoDFS
 
-NanoDFS is a HDFS-inspired distributed file system:
-
-- **Client node**: file manager, upload/download/delete, node config, reporting.
-- **Data node**: block storage server with local disk usage display and configurable upload/download rate limits.
+**NanoDFS** is a lightweight HDFS-inspired distributed file system for learning and benchmarking. A ClientNode web UI manages metadata, splits files into fixed-size blocks, and round-robin assigns blocks to DataNodes; downloads reassemble blocks with validation. DataNodes persist blocks locally with optional throughput limits. 
 
 ## Quick start
 
